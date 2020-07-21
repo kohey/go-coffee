@@ -66,30 +66,31 @@ func (cups Coffee) GroundBeans() GroundBean {
 }
 
 // お湯を沸かす
-func boil(ctx context.Context, water Water) HotWater {
+func boil(ctx context.Context, ch chan<- HotWater, water Water) {
 	defer trace.StartRegion(ctx, "boil").End()
 	time.Sleep(400 * time.Millisecond)
-	return HotWater(water)
+	ch <- HotWater(water)
 }
 
 // コーヒー豆を挽く
-func grind(ctx context.Context, beans Bean) GroundBean {
+func grind(ctx context.Context, ch chan<- GroundBean, beans Bean) {
 	defer trace.StartRegion(ctx, "grid").End()
 	time.Sleep(200 * time.Millisecond)
-	return GroundBean(beans)
+	ch <- GroundBean(beans)
 }
 
 // コーヒーを淹れる
-func brew(ctx context.Context, hotWater HotWater, groundBeans GroundBean) Coffee {
+func brew(ctx context.Context, ch chan<- Coffee, hotWater HotWater, groundBeans GroundBean) {
 	defer trace.StartRegion(ctx, "brew").End()
 	time.Sleep(1 * time.Second)
 	// 少ない方を優先する
 	cups1 := Coffee(hotWater / (1 * CupsCoffee).HotWater())
 	cups2 := Coffee(groundBeans / (1 * CupsCoffee).GroundBeans())
 	if cups1 < cups2 {
-		return cups1
+		ch <- cups1
+	} else {
+		ch <- cups2
 	}
-	return cups2
 }
 
 func main() {
@@ -126,33 +127,55 @@ func _main() {
 	water := amountCoffee.Water()
 	beans := amountCoffee.Beans()
 
+	// チャネル
+	hwch := make(chan HotWater)
+	gbch := make(chan GroundBean)
+	cfch := make(chan Coffee)
+
 	fmt.Println(water)
 	fmt.Println(beans)
 
 	// お湯を沸かす
-	var hotWater HotWater
+	var hwCount int
 	for water > 0 {
+		hwCount++
 		water -= 600 * MilliLiterWater
-		hotWater += boil(ctx, 600*MilliLiterWater)
+		go boil(ctx, hwch, 600*MilliLiterWater)
 	}
-	fmt.Println(hotWater)
 
 	// 豆を挽く
-	var groundBeans GroundBean
+	var gbCount int
 	for beans > 0 {
 		beans -= 20 * GramBeans
-		groundBeans += grind(ctx, 20*GramBeans)
+		gbCount++
+		go grind(ctx, gbch, 20*GramBeans)
+	}
+
+	var groundBeans GroundBean
+	for i := 0; i < gbCount; i++ {
+		groundBeans += <-gbch
 	}
 	fmt.Println(groundBeans)
 
+	var hotWater HotWater
+	for i := 0; i < hwCount; i++ {
+		hotWater += <-hwch
+	}
+	fmt.Println(hotWater)
+
 	// コーヒーを淹れる
-	var coffee Coffee
+	var cfCount int
 	cups := 4 * CupsCoffee
 	for hotWater >= cups.HotWater() && groundBeans >= cups.GroundBeans() {
 		hotWater -= cups.HotWater()
 		groundBeans -= cups.GroundBeans()
-		coffee += brew(ctx, cups.HotWater(), cups.GroundBeans())
+		cfCount++
+		go brew(ctx, cfch, cups.HotWater(), cups.GroundBeans())
 	}
 
+	var coffee Coffee
+	for i := 0; i < cfCount; i++ {
+		coffee += <-cfch
+	}
 	fmt.Println(coffee)
 }
