@@ -1,0 +1,13 @@
+@startuml
+  Task -> Region
+  note over Task
+    Task が複数の Region を有する
+  end note
+  group Region
+    loop Log
+      note over Region
+        Region の中で Log が吐かれる
+      end note
+    end
+  end
+@enduml
