@@ -66,19 +66,22 @@ func (cups Coffee) GroundBeans() GroundBean {
 }
 
 // お湯を沸かす
-func boil(water Water) HotWater {
+func boil(ctx context.Context, water Water) HotWater {
+	defer trace.StartRegion(ctx, "boil").End()
 	time.Sleep(400 * time.Millisecond)
 	return HotWater(water)
 }
 
 // コーヒー豆を挽く
-func grind(beans Bean) GroundBean {
+func grind(ctx context.Context, beans Bean) GroundBean {
+	defer trace.StartRegion(ctx, "grid").End()
 	time.Sleep(200 * time.Millisecond)
 	return GroundBean(beans)
 }
 
 // コーヒーを淹れる
-func brew(hotWater HotWater, groundBeans GroundBean) Coffee {
+func brew(ctx context.Context, hotWater HotWater, groundBeans GroundBean) Coffee {
+	defer trace.StartRegion(ctx, "brew").End()
 	time.Sleep(1 * time.Second)
 	// 少ない方を優先する
 	cups1 := Coffee(hotWater / (1 * CupsCoffee).HotWater())
@@ -130,7 +133,7 @@ func _main() {
 	var hotWater HotWater
 	for water > 0 {
 		water -= 600 * MilliLiterWater
-		hotWater += boil(600 * MilliLiterWater)
+		hotWater += boil(ctx, 600*MilliLiterWater)
 	}
 	fmt.Println(hotWater)
 
@@ -138,7 +141,7 @@ func _main() {
 	var groundBeans GroundBean
 	for beans > 0 {
 		beans -= 20 * GramBeans
-		groundBeans += grind(20 * GramBeans)
+		groundBeans += grind(ctx, 20*GramBeans)
 	}
 	fmt.Println(groundBeans)
 
@@ -148,7 +151,7 @@ func _main() {
 	for hotWater >= cups.HotWater() && groundBeans >= cups.GroundBeans() {
 		hotWater -= cups.HotWater()
 		groundBeans -= cups.GroundBeans()
-		coffee += brew(cups.HotWater(), cups.GroundBeans())
+		coffee += brew(ctx, cups.HotWater(), cups.GroundBeans())
 	}
 
 	fmt.Println(coffee)
