@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
+	"runtime/trace"
 	"time"
 )
 
@@ -86,6 +89,29 @@ func brew(hotWater HotWater, groundBeans GroundBean) Coffee {
 }
 
 func main() {
+	// ファイルを新規で作成
+	f, err := os.Create("trace.out")
+	if err != nil {
+		log.Fatalln(err.Error())
+	}
+
+	// 作成したファイルは最後に閉じる
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Fatalln(err.Error())
+		}
+	}()
+
+	// trace の開始
+	if err := trace.Start(f); err != nil {
+		log.Fatalln(err.Error())
+	}
+	// defer は `Last In First Out`
+	defer trace.Stop()
+	_main()
+}
+
+func _main() {
 	// 作るコーヒーの数
 	const amountCoffee = 20 * CupsCoffee
 
