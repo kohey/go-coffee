@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -114,6 +115,9 @@ func main() {
 func _main() {
 	// 作るコーヒーの数
 	const amountCoffee = 20 * CupsCoffee
+
+	ctx, task := trace.NewTask(context.Background(), "make-coffee")
+	defer task.End()
 
 	// 材料
 	water := amountCoffee.Water()

@@ -3,3 +3,7 @@
 `Last In First Out`
 
 ## Task と Region と Log
+前提: main() のパフォーマンスが知りたい
+1. _main()に処理を移して、main() の中で trace.Start(*file) → これで、ざっくりしたフローがわかる
+2. 関数中のそれぞれの処理に対して、どれくらいのパフォーマンスが出ているのか、気になってくるはず。
+3. そこで、_main() 中で、task, region を定義する
