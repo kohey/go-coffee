@@ -19,3 +19,7 @@ region := trace.StartRegion(ctx, "リージョン")
 defer region.End()
 ```
 のような感じ
+
+## trace で task1 の プロファイルが表示されなかった
+パッチを当てる
+https://github.com/kumakichi/patch-go-tool-trace
