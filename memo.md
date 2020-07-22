@@ -23,3 +23,12 @@ defer region.End()
 ## trace で task1 の プロファイルが表示されなかった
 パッチを当てる
 https://github.com/kumakichi/patch-go-tool-trace
+
+## lock について
+defer で unlock する場合もあるが、for や 再帰呼び出しでデッドロックを引き起こす可能性もあるので、注意
+
+## goruitine の待ち合わせ
+- Wait: 複数の goroutine を待ち合わせ
+- Add : 追加した分だけ、Done メソッド が呼ばれるまで、処理をブロックする
+
+## sync.Mutex, sync.WaitGroup
