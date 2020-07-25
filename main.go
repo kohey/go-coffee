@@ -138,7 +138,7 @@ func _main() {
 	// 作るコーヒーの数
 	const amountCoffee = 20 * CupsCoffee
 
-	ctx, task := trace.NewTask(context.Background(), "make-coffee")
+	taskCtx, task := trace.NewTask(context.Background(), "make-coffee")
 	defer task.End()
 
 	// 材料
@@ -148,7 +148,7 @@ func _main() {
 	fmt.Println(water)
 	fmt.Println(beans)
 
-	var eg errgroup.Group
+	eg, ctx := errgroup.WithContext(taskCtx)
 
 	// お湯を沸かす
 	var hotWater HotWater
@@ -156,17 +156,24 @@ func _main() {
 
 	for water > 0 {
 		water -= 600 * MilliLiterWater
-		eg.Go(
-			func() error {
-				hw, err := boil(ctx, 600*MilliLiterWater)
-				if err != nil {
-					return err
-				}
-				hwmu.Lock()
-				defer hwmu.Unlock()
-				hotWater += hw
-				return nil
-			})
+		eg.Go(func() error {
+			// cancel を検知する
+			select {
+			case <-ctx.Done():
+				trace.Log(ctx, "boil error", ctx.Err().Error())
+				return ctx.Err()
+			default:
+			}
+			hw, err := boil(ctx, 600*MilliLiterWater)
+			if err != nil {
+				return err
+			}
+
+			hwmu.Lock()
+			defer hwmu.Unlock()
+			hotWater += hw
+			return nil
+		})
 	}
 
 	// 豆を挽く
@@ -176,10 +183,19 @@ func _main() {
 	for beans > 0 {
 		beans -= 20 * GramBeans
 		eg.Go(func() error {
+			// cancel を検知
+			select {
+			case <-ctx.Done():
+				trace.Log(ctx, "bean error", ctx.Err().Error())
+				return ctx.Err()
+			default:
+			}
+
 			gb, err := grind(ctx, 20*GramBeans)
 			if err != nil {
 				return err
 			}
+
 			gbmu.Lock()
 			defer gbmu.Unlock()
 			groundBeans += gb
@@ -204,16 +220,25 @@ func _main() {
 	for hotWater >= cups.HotWater() && groundBeans >= cups.GroundBeans() {
 		hotWater -= cups.HotWater()
 		groundBeans -= cups.GroundBeans()
-		eg2.Go(func() error {
-			cf, err := brew(ctx, cups.HotWater(), cups.GroundBeans())
-			if err != nil {
-				return err
-			}
-			cfmu.Lock()
-			defer cfmu.Unlock()
-			coffee += cf
-			return nil
-		})
+		eg2.Go(
+			func() error {
+				// cancel を検知
+				select {
+				case <-ctx.Done():
+					trace.Log(ctx, "brew error", ctx.Err().Error())
+					return ctx.Err()
+				default:
+				}
+				cf, err := brew(ctx, cups.HotWater(), cups.GroundBeans())
+				if err != nil {
+					return err
+				}
+
+				cfmu.Lock()
+				defer cfmu.Unlock()
+				coffee += cf
+				return nil
+			})
 	}
 
 	if err := eg2.Wait(); err != nil {
