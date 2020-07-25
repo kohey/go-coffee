@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"runtime/trace"
+	"sync"
 	"time"
 )
 
@@ -66,31 +67,30 @@ func (cups Coffee) GroundBeans() GroundBean {
 }
 
 // お湯を沸かす
-func boil(ctx context.Context, ch chan<- HotWater, water Water) {
+func boil(ctx context.Context, water Water) HotWater {
 	defer trace.StartRegion(ctx, "boil").End()
 	time.Sleep(400 * time.Millisecond)
-	ch <- HotWater(water)
+	return HotWater(water)
 }
 
 // コーヒー豆を挽く
-func grind(ctx context.Context, ch chan<- GroundBean, beans Bean) {
+func grind(ctx context.Context, beans Bean) GroundBean {
 	defer trace.StartRegion(ctx, "grid").End()
 	time.Sleep(200 * time.Millisecond)
-	ch <- GroundBean(beans)
+	return GroundBean(beans)
 }
 
 // コーヒーを淹れる
-func brew(ctx context.Context, ch chan<- Coffee, hotWater HotWater, groundBeans GroundBean) {
+func brew(ctx context.Context, hotWater HotWater, groundBeans GroundBean) Coffee {
 	defer trace.StartRegion(ctx, "brew").End()
 	time.Sleep(1 * time.Second)
 	// 少ない方を優先する
 	cups1 := Coffee(hotWater / (1 * CupsCoffee).HotWater())
 	cups2 := Coffee(groundBeans / (1 * CupsCoffee).GroundBeans())
 	if cups1 < cups2 {
-		ch <- cups1
-	} else {
-		ch <- cups2
+		return cups1
 	}
+	return cups2
 }
 
 func main() {
@@ -127,55 +127,66 @@ func _main() {
 	water := amountCoffee.Water()
 	beans := amountCoffee.Beans()
 
-	// チャネル
-	hwch := make(chan HotWater)
-	gbch := make(chan GroundBean)
-	cfch := make(chan Coffee)
-
 	fmt.Println(water)
 	fmt.Println(beans)
 
+	var wg sync.WaitGroup
+
 	// お湯を沸かす
-	var hwCount int
+	var hotWater HotWater
+	var hwmu sync.Mutex
+
 	for water > 0 {
-		hwCount++
 		water -= 600 * MilliLiterWater
-		go boil(ctx, hwch, 600*MilliLiterWater)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			hw := boil(ctx, 600*MilliLiterWater)
+			hwmu.Lock()
+			defer hwmu.Unlock()
+			hotWater += hw
+		}()
 	}
 
 	// 豆を挽く
-	var gbCount int
+	var groundBeans GroundBean
+	var gbmu sync.Mutex
+
 	for beans > 0 {
 		beans -= 20 * GramBeans
-		gbCount++
-		go grind(ctx, gbch, 20*GramBeans)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			gb := grind(ctx, 20*GramBeans)
+			gbmu.Lock()
+			defer gbmu.Unlock()
+			groundBeans += gb
+		}()
 	}
 
-	var groundBeans GroundBean
-	for i := 0; i < gbCount; i++ {
-		groundBeans += <-gbch
-	}
+	wg.Wait()
+	fmt.Println(hotWater)
 	fmt.Println(groundBeans)
 
-	var hotWater HotWater
-	for i := 0; i < hwCount; i++ {
-		hotWater += <-hwch
-	}
-	fmt.Println(hotWater)
-
 	// コーヒーを淹れる
-	var cfCount int
+	var wg2 sync.WaitGroup
+	var coffee Coffee
+	var cfmu sync.Mutex
+
 	cups := 4 * CupsCoffee
 	for hotWater >= cups.HotWater() && groundBeans >= cups.GroundBeans() {
 		hotWater -= cups.HotWater()
 		groundBeans -= cups.GroundBeans()
-		cfCount++
-		go brew(ctx, cfch, cups.HotWater(), cups.GroundBeans())
+		wg2.Add(1)
+		go func() {
+			defer wg2.Done()
+			cf := brew(ctx, cups.HotWater(), cups.GroundBeans())
+			cfmu.Lock()
+			defer cfmu.Unlock()
+			coffee += cf
+		}()
 	}
 
-	var coffee Coffee
-	for i := 0; i < cfCount; i++ {
-		coffee += <-cfch
-	}
+	wg2.Wait()
 	fmt.Println(coffee)
 }
