@@ -9,6 +9,8 @@ import (
 	"runtime/trace"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -146,7 +148,7 @@ func _main() {
 	fmt.Println(water)
 	fmt.Println(beans)
 
-	var wg sync.WaitGroup
+	var eg errgroup.Group
 
 	// お湯を沸かす
 	var hotWater HotWater
@@ -154,14 +156,17 @@ func _main() {
 
 	for water > 0 {
 		water -= 600 * MilliLiterWater
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			hw, _ := boil(ctx, 600*MilliLiterWater)
-			hwmu.Lock()
-			defer hwmu.Unlock()
-			hotWater += hw
-		}()
+		eg.Go(
+			func() error {
+				hw, err := boil(ctx, 600*MilliLiterWater)
+				if err != nil {
+					return err
+				}
+				hwmu.Lock()
+				defer hwmu.Unlock()
+				hotWater += hw
+				return nil
+			})
 	}
 
 	// 豆を挽く
@@ -170,22 +175,28 @@ func _main() {
 
 	for beans > 0 {
 		beans -= 20 * GramBeans
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			gb, _ := grind(ctx, 20*GramBeans)
+		eg.Go(func() error {
+			gb, err := grind(ctx, 20*GramBeans)
+			if err != nil {
+				return err
+			}
 			gbmu.Lock()
 			defer gbmu.Unlock()
 			groundBeans += gb
-		}()
+			return nil
+		})
 	}
 
-	wg.Wait()
+	if err := eg.Wait(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+
 	fmt.Println(hotWater)
 	fmt.Println(groundBeans)
 
 	// コーヒーを淹れる
-	var wg2 sync.WaitGroup
+	var eg2 errgroup.Group
 	var coffee Coffee
 	var cfmu sync.Mutex
 
@@ -193,16 +204,21 @@ func _main() {
 	for hotWater >= cups.HotWater() && groundBeans >= cups.GroundBeans() {
 		hotWater -= cups.HotWater()
 		groundBeans -= cups.GroundBeans()
-		wg2.Add(1)
-		go func() {
-			defer wg2.Done()
-			cf, _ := brew(ctx, cups.HotWater(), cups.GroundBeans())
+		eg2.Go(func() error {
+			cf, err := brew(ctx, cups.HotWater(), cups.GroundBeans())
+			if err != nil {
+				return err
+			}
 			cfmu.Lock()
 			defer cfmu.Unlock()
 			coffee += cf
-		}()
+			return nil
+		})
 	}
 
-	wg2.Wait()
+	if err := eg2.Wait(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
 	fmt.Println(coffee)
 }
