@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -67,30 +68,45 @@ func (cups Coffee) GroundBeans() GroundBean {
 }
 
 // お湯を沸かす
-func boil(ctx context.Context, water Water) HotWater {
+func boil(ctx context.Context, water Water) (HotWater, error) {
 	defer trace.StartRegion(ctx, "boil").End()
+	if water > 600*MilliLiterWater {
+		return 0, errors.New("1度に沸かすことのできるお湯は600[ml]までです")
+	}
 	time.Sleep(400 * time.Millisecond)
-	return HotWater(water)
+	return HotWater(water), nil
 }
 
 // コーヒー豆を挽く
-func grind(ctx context.Context, beans Bean) GroundBean {
+func grind(ctx context.Context, beans Bean) (GroundBean, error) {
 	defer trace.StartRegion(ctx, "grid").End()
+	if beans > 20*GramBeans {
+		return 0, errors.New("1度に挽くことのできる豆は20[g]までです")
+	}
 	time.Sleep(200 * time.Millisecond)
-	return GroundBean(beans)
+	return GroundBean(beans), nil
 }
 
 // コーヒーを淹れる
-func brew(ctx context.Context, hotWater HotWater, groundBeans GroundBean) Coffee {
+func brew(ctx context.Context, hotWater HotWater, groundBeans GroundBean) (Coffee, error) {
 	defer trace.StartRegion(ctx, "brew").End()
+
+	if hotWater < (1 * CupsCoffee).HotWater() {
+		return 0, errors.New("お湯が足りません")
+	}
+
+	if groundBeans < (1 * CupsCoffee).GroundBeans() {
+		return 0, errors.New("粉が足りません")
+	}
+
 	time.Sleep(1 * time.Second)
 	// 少ない方を優先する
 	cups1 := Coffee(hotWater / (1 * CupsCoffee).HotWater())
 	cups2 := Coffee(groundBeans / (1 * CupsCoffee).GroundBeans())
 	if cups1 < cups2 {
-		return cups1
+		return cups1, nil
 	}
-	return cups2
+	return cups2, nil
 }
 
 func main() {
@@ -141,7 +157,7 @@ func _main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			hw := boil(ctx, 600*MilliLiterWater)
+			hw, _ := boil(ctx, 600*MilliLiterWater)
 			hwmu.Lock()
 			defer hwmu.Unlock()
 			hotWater += hw
@@ -157,7 +173,7 @@ func _main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			gb := grind(ctx, 20*GramBeans)
+			gb, _ := grind(ctx, 20*GramBeans)
 			gbmu.Lock()
 			defer gbmu.Unlock()
 			groundBeans += gb
@@ -180,7 +196,7 @@ func _main() {
 		wg2.Add(1)
 		go func() {
 			defer wg2.Done()
-			cf := brew(ctx, cups.HotWater(), cups.GroundBeans())
+			cf, _ := brew(ctx, cups.HotWater(), cups.GroundBeans())
 			cfmu.Lock()
 			defer cfmu.Unlock()
 			coffee += cf
