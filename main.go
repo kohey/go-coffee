@@ -49,27 +49,22 @@ func (cups Coffee) String() string {
 	return fmt.Sprintf("%d cup(s) coffee", int(cups))
 }
 
-// 1カップのコーヒーを淹れるのに必要な水の量
 func (cups Coffee) Water() Water {
 	return Water(180*cups) / MilliLiterWater
 }
 
-// 1カップのコーヒーを淹れるのに必要なお湯の量
 func (cups Coffee) HotWater() HotWater {
 	return HotWater(180*cups) / MilliLiterHotWater
 }
 
-// 1カップのコーヒーを淹れるのに必要な豆の量
 func (cups Coffee) Beans() Bean {
 	return Bean(20*cups) / GramBeans
 }
 
-// 1カップのコーヒーを淹れるのに必要な粉の量
 func (cups Coffee) GroundBeans() GroundBean {
 	return GroundBean(20*cups) / GramGroundBeans
 }
 
-// お湯を沸かす
 func boil(ctx context.Context, water Water) (HotWater, error) {
 	defer trace.StartRegion(ctx, "boil").End()
 	if water > 600*MilliLiterWater {
@@ -79,7 +74,6 @@ func boil(ctx context.Context, water Water) (HotWater, error) {
 	return HotWater(water), nil
 }
 
-// コーヒー豆を挽く
 func grind(ctx context.Context, beans Bean) (GroundBean, error) {
 	defer trace.StartRegion(ctx, "grid").End()
 	if beans > 20*GramBeans {
@@ -89,7 +83,6 @@ func grind(ctx context.Context, beans Bean) (GroundBean, error) {
 	return GroundBean(beans), nil
 }
 
-// コーヒーを淹れる
 func brew(ctx context.Context, hotWater HotWater, groundBeans GroundBean) (Coffee, error) {
 	defer trace.StartRegion(ctx, "brew").End()
 
@@ -112,36 +105,31 @@ func brew(ctx context.Context, hotWater HotWater, groundBeans GroundBean) (Coffe
 }
 
 func main() {
-	// ファイルを新規で作成
 	f, err := os.Create("trace.out")
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
 
-	// 作成したファイルは最後に閉じる
 	defer func() {
 		if err := f.Close(); err != nil {
 			log.Fatalln(err.Error())
 		}
 	}()
 
-	// trace の開始
 	if err := trace.Start(f); err != nil {
 		log.Fatalln(err.Error())
 	}
-	// defer は `Last In First Out`
+
 	defer trace.Stop()
 	_main()
 }
 
 func _main() {
-	// 作るコーヒーの数
 	const amountCoffee = 20 * CupsCoffee
 
 	taskCtx, task := trace.NewTask(context.Background(), "make-coffee")
 	defer task.End()
 
-	// 材料
 	water := amountCoffee.Water()
 	beans := amountCoffee.Beans()
 
@@ -150,10 +138,10 @@ func _main() {
 
 	eg, ctx := errgroup.WithContext(taskCtx)
 
-	// お湯を沸かす
 	var hotWater HotWater
 	var hwmu sync.Mutex
 
+	// 水を沸かす
 	for water > 0 {
 		water -= 600 * MilliLiterWater
 		eg.Go(func() error {
